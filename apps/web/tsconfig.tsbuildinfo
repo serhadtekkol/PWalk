@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/appshell.tsx","./src/components/createprojectmodal.tsx","./src/components/mytasksview.tsx","./src/components/notificationcenter.tsx","./src/components/settingsmodal.tsx","./src/lib/api.ts","./src/pages/loginpage.tsx","./src/stores/auth.tsx","./src/stores/theme.tsx","./src/types/pmam.ts"],"version":"5.9.3"}
