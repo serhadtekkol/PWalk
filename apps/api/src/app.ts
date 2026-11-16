@@ -13,6 +13,9 @@ import { columnRoutes } from './routes/columns.js';
 import { taskRoutes } from './routes/tasks.js';
 import { commentRoutes } from './routes/comments.js';
 import { scheduleRoutes } from './routes/schedule.js';
+import { notificationRoutes } from './routes/notifications.js';
+import { createNotificationDeliverer } from './services/push.js';
+import { startReminderScheduler } from './services/reminder-worker.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -68,6 +71,9 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     routePrefix: '/docs',
   });
 
+  const deliver = createNotificationDeliverer(prisma, config);
+  fastify.decorate('deliverNotification', deliver);
+
   await fastify.register(authPlugin, { secret: config.jwtAccessSecret });
   await fastify.register(healthRoutes);
   await fastify.register(authRoutes);
@@ -76,6 +82,14 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await fastify.register(taskRoutes);
   await fastify.register(commentRoutes);
   await fastify.register(scheduleRoutes);
+  await fastify.register(notificationRoutes);
+
+  if (opts.enableScheduler) {
+    const timer = startReminderScheduler(prisma, deliver);
+    fastify.addHook('onClose', async () => {
+      clearInterval(timer);
+    });
+  }
 
   return fastify;
 }
