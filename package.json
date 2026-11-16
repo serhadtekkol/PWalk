@@ -1,0 +1,10 @@
+{
+  "name": "pmam",
+  "private": true,
+  "scripts": {
+    "dev:api": "pnpm --filter @pmam/api dev",
+    "dev:web": "pnpm --filter @pmam/web dev",
+    "build": "pnpm --filter @pmam/api build && pnpm --filter @pmam/web build",
+    "test": "pnpm --filter @pmam/api test && pnpm --filter @pmam/web test"
+  }
+}
