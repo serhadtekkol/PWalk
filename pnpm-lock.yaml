@@ -31,6 +31,9 @@ importers:
       fastify:
         specifier: ^5.2.2
         version: 5.12.8
+      fastify-plugin:
+        specifier: ^6.0.1
+        version: 6.0.1
       mssql:
         specifier: ^11.0.1
         version: 11.0.2
