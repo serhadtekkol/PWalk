@@ -22,6 +22,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
     progress: z.number().int().min(0).max(100).default(0),
     isMilestone: z.boolean().default(false),
     assigneeId: z.string().nullable().optional(),
+    tags: z.string().max(2000).nullable().optional(),
   });
 
   const updateSchema = z.object({
@@ -37,6 +38,8 @@ export async function taskRoutes(fastify: FastifyInstance) {
     progress: z.number().int().min(0).max(100).optional(),
     isMilestone: z.boolean().optional(),
     assigneeId: z.string().nullable().optional(),
+    tags: z.string().max(2000).nullable().optional(),
+    cascade: z.boolean().optional(),
   });
 
   const moveSchema = z.object({
@@ -210,15 +213,64 @@ export async function taskRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: 'Bitiş tarihi başlangıç tarihinden önce olamaz.' });
     }
 
+    const { cascade, ...patchFields } = body.data;
     const updated = await fastify.prisma.task.update({
       where: { id },
       data: {
-        ...body.data,
-        startDate: body.data.startDate ? startDate : undefined,
-        dueDate: body.data.dueDate ? dueDate : undefined,
+        ...patchFields,
+        startDate: patchFields.startDate ? startDate : undefined,
+        dueDate: patchFields.dueDate ? dueDate : undefined,
       },
       include: taskInclude,
     });
+
+    if (cascade && (patchFields.startDate || patchFields.dueDate)) {
+      const MS_DAY = 86_400_000;
+      const projTasks = await fastify.prisma.task.findMany({
+        where: { projectId: existing.projectId },
+        include: { successorLinks: true },
+      });
+      const byId = new Map<string, any>(projTasks.map((t: any) => [t.id, t]));
+      const queue: string[] = [id];
+      const visited = new Set<string>();
+
+      while (queue.length > 0) {
+        const curId = queue.shift()!;
+        if (visited.has(curId)) continue;
+        visited.add(curId);
+        const pred = byId.get(curId);
+        if (!pred) continue;
+
+        for (const dep of pred.successorLinks ?? []) {
+          const succ = byId.get(dep.successorId);
+          if (!succ) continue;
+          const lagMs = (dep.lagDays ?? 0) * MS_DAY;
+          const pStart = new Date(pred.startDate).getTime();
+          const pDue = new Date(pred.dueDate).getTime();
+          const sStart = new Date(succ.startDate).getTime();
+          const sDue = new Date(succ.dueDate).getTime();
+          const sSpan = Math.max(0, sDue - sStart);
+
+          let requiredStart = sStart;
+          if (dep.type === 'FS') requiredStart = pDue + MS_DAY + lagMs;
+          else if (dep.type === 'SS') requiredStart = pStart + lagMs;
+          else if (dep.type === 'FF') requiredStart = pDue + lagMs - sSpan;
+          else if (dep.type === 'SF') requiredStart = pStart + lagMs - sSpan;
+
+          if (requiredStart > sStart) {
+            const newStart = new Date(requiredStart);
+            const newDue = new Date(requiredStart + sSpan);
+            await fastify.prisma.task.update({
+              where: { id: succ.id },
+              data: { startDate: newStart, dueDate: newDue },
+            });
+            succ.startDate = newStart;
+            succ.dueDate = newDue;
+            queue.push(succ.id);
+          }
+        }
+      }
+    }
 
     await fastify.prisma.taskActivity.create({
       data: {

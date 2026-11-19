@@ -66,6 +66,9 @@ export interface Task {
   status: TaskStatus;
   startDate: string;
   dueDate: string;
+  baselineStartDate?: string | null;
+  baselineDueDate?: string | null;
+  tags?: string | null;
   estimatedHours: number;
   progress: number;
   isMilestone: boolean;

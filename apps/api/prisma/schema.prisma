@@ -94,9 +94,12 @@ model Task {
   description    String?          @db.NVarChar(Max)
   priority       String           @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT
   status         String           @default("TODO") // TODO | IN_PROGRESS | REVIEW | DONE
-  startDate      DateTime
-  dueDate        DateTime
-  estimatedHours Float            @default(8)
+  startDate         DateTime
+  dueDate           DateTime
+  baselineStartDate DateTime?
+  baselineDueDate   DateTime?
+  tags              String?          @db.NVarChar(Max) // JSON array string e.g. ["Backend","UI"]
+  estimatedHours    Float            @default(8)
   progress       Int              @default(0)
   isMilestone    Boolean          @default(false)
   assigneeId     String?

@@ -1,6 +1,28 @@
 # PMAM — Proje Yönetimi Uygulaması
 
-Kanban Board, MS Project benzeri Gantt/WBS/Kritik Yol/İş Yükü görünümleri, Web Push + `ntfy` bildirimleri ve mobil uyumlu REST API (`/api/v1` + `/docs` Swagger) içeren çok kullanıcılı proje yönetim uygulaması.
+Kanban Board, MS Project benzeri Gantt/WBS/Kritik Yol/İş Yükü görünümleri, Otomatik Tarih Kaydırma (Auto-Schedule), Baseline karşılaştırması, Web Push + `ntfy` bildirimleri ve mobil uyumlu REST API (`/api/v1` + `/docs` Swagger) içeren çok kullanıcılı proje yönetim uygulaması.
+
+## Ekran Görüntüleri
+
+### Proje Özeti (Dashboard)
+![Proje Özeti](docs/screenshots/01-overview.png)
+
+### Kanban Panosu
+![Kanban Panosu](docs/screenshots/02-kanban.png)
+
+### Gantt, WBS & Kritik Yol (CPM)
+![Gantt ve Kritik Yol](docs/screenshots/03-gantt.png)
+
+### Takım İş Yükü (Workload)
+![İş Yükü](docs/screenshots/04-workload.png)
+
+## Öne Çıkan Özellikler
+
+- **Proje Özeti (Dashboard):** Tamamlanma oranı, geciken görevler, kritik yol süresi, durum/öncelik dağılımı ve takım yükü özeti.
+- **Modern Kanban Panosu:** Sürükle-bırak görev taşıma, özel kolon ekleme/düzenleme/sıralama, WIP limiti uyarısı, renkli etiketler ve tek tık hızlı filtreler (`Bana Atananlar`, `Kritik Yol`, `Gecikenler`).
+- **MS Project Gantt & WBS:** Hiyerarşik WBS ağacı, `FS/SS/FF/SF` bağımlılık okları, takvim boşluklarını hesaba katan canlı **Kritik Yol (CPM)** motoru, **Otomatik Tarih Kaydırma (Auto-Schedule)**, **Baseline** karşılaştırması ve **CSV / `.ics`** dışa aktarım.
+- **İş Yükü & Kapasite Planlama:** Görev bazlı `estimatedHours` dağılımı ve kullanıcı bazlı `dailyCapacityHours` aşırı yük tespiti.
+- **Bildirimler:** `@mention` yorum bildirimleri, Web Push (PWA) ve `ntfy` entegrasyonu.
 
 ## Kurulum ve Docker ile Çalıştırma
 

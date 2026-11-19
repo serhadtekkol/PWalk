@@ -132,4 +132,104 @@ export async function scheduleRoutes(fastify: FastifyInstance) {
 
     return computeWorkload(tasks, members, from, to);
   });
+
+  fastify.post('/api/v1/projects/:id/schedule/baseline', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const perm = await requireProjectRole(fastify.prisma, request.authUser.id, request.authUser.role, id, [
+      'OWNER',
+      'EDITOR',
+    ]);
+    if (!perm) return reply.code(403).send({ error: 'Baseline alma yetkiniz yok.' });
+
+    const tasks = await fastify.prisma.task.findMany({ where: { projectId: id } });
+    for (const t of tasks) {
+      await fastify.prisma.task.update({
+        where: { id: t.id },
+        data: { baselineStartDate: t.startDate, baselineDueDate: t.dueDate },
+      });
+    }
+    return { ok: true, updatedCount: tasks.length };
+  });
+
+  fastify.get('/api/v1/projects/:id/export/csv', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const perm = await requireProjectRole(fastify.prisma, request.authUser.id, request.authUser.role, id, [
+      'OWNER',
+      'EDITOR',
+      'VIEWER',
+    ]);
+    if (!perm) return reply.code(403).send({ error: 'Erişim reddedildi.' });
+
+    const [project, tasks] = await Promise.all([
+      fastify.prisma.project.findUnique({ where: { id } }),
+      fastify.prisma.task.findMany({
+        where: { projectId: id },
+        include: { assignee: { select: { name: true } } },
+        orderBy: { code: 'asc' },
+      }),
+    ]);
+
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const header = ['Kod', 'Başlık', 'Durum', 'Öncelik', 'Sorumlu', 'Başlangıç', 'Bitiş', 'İlerleme (%)', 'Tahmini Saat', 'Etiketler'].join(',');
+    const rows = tasks.map((t: any) =>
+      [
+        esc(t.code),
+        esc(t.title),
+        esc(t.status),
+        esc(t.priority),
+        esc(t.assignee?.name ?? 'Atanmamış'),
+        esc(new Date(t.startDate).toISOString().slice(0, 10)),
+        esc(new Date(t.dueDate).toISOString().slice(0, 10)),
+        esc(t.progress),
+        esc(t.estimatedHours),
+        esc(t.tags ?? ''),
+      ].join(','),
+    );
+    const csv = '\uFEFF' + [header, ...rows].join('\n');
+    const filename = `${(project?.key ?? 'project').toLowerCase()}-tasks.csv`;
+    reply.header('Content-Type', 'text/csv; charset=utf-8');
+    reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+    return reply.send(csv);
+  });
+
+  fastify.get('/api/v1/projects/:id/export/ics', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const perm = await requireProjectRole(fastify.prisma, request.authUser.id, request.authUser.role, id, [
+      'OWNER',
+      'EDITOR',
+      'VIEWER',
+    ]);
+    if (!perm) return reply.code(403).send({ error: 'Erişim reddedildi.' });
+
+    const [project, tasks] = await Promise.all([
+      fastify.prisma.project.findUnique({ where: { id } }),
+      fastify.prisma.task.findMany({ where: { projectId: id }, orderBy: { dueDate: 'asc' } }),
+    ]);
+
+    const fmtDate = (d: Date | string) => new Date(d).toISOString().slice(0, 10).replace(/-/g, '');
+    const escIcs = (s: string) => s.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//PMAM//Project Schedule//TR',
+      `X-WR-CALNAME:${escIcs(project?.name ?? 'PMAM Proje')}`,
+    ];
+    for (const t of tasks) {
+      const endPlusOne = new Date(new Date(t.dueDate).getTime() + 86_400_000);
+      lines.push(
+        'BEGIN:VEVENT',
+        `UID:${t.id}@pmam`,
+        `DTSTART;VALUE=DATE:${fmtDate(t.startDate)}`,
+        `DTEND;VALUE=DATE:${fmtDate(endPlusOne)}`,
+        `SUMMARY:${escIcs(`${t.code}: ${t.title}`)}`,
+        `DESCRIPTION:${escIcs(t.description ?? '')}`,
+        'END:VEVENT',
+      );
+    }
+    lines.push('END:VCALENDAR');
+    const filename = `${(project?.key ?? 'project').toLowerCase()}-schedule.ics`;
+    reply.header('Content-Type', 'text/calendar; charset=utf-8');
+    reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+    return reply.send(lines.join('\r\n'));
+  });
 }

@@ -1,10 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  AlertCircle,
   Bell,
+  CheckCircle2,
   Clock,
   Diamond,
   GitBranch,
   Link2,
+  Loader2,
   MessageSquare,
   Plus,
   Trash2,
@@ -53,6 +56,8 @@ export function TaskDrawer({
   const [estimatedHours, setEstimatedHours] = useState(8);
   const [progress, setProgress] = useState(0);
   const [isMilestone, setIsMilestone] = useState(false);
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
 
   const [subtaskTitle, setSubtaskTitle] = useState('');
   const [depPredId, setDepPredId] = useState('');
@@ -67,6 +72,23 @@ export function TaskDrawer({
   const [remindMsg, setRemindMsg] = useState('');
   const [tab, setTab] = useState<'comments' | 'activity'>('comments');
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+
+  const showToast = (type: 'success' | 'error', text: string) => {
+    setToast({ type, text });
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+    }, 3200);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!task) return;
@@ -80,6 +102,13 @@ export function TaskDrawer({
     setEstimatedHours(task.estimatedHours);
     setProgress(task.progress);
     setIsMilestone(task.isMilestone);
+    try {
+      const parsed = task.tags ? JSON.parse(task.tags) : [];
+      setTags(Array.isArray(parsed) ? parsed.map(String) : []);
+    } catch {
+      setTags(task.tags ? task.tags.split(',').map((s) => s.trim()).filter(Boolean) : []);
+    }
+    setTagInput('');
     setError('');
 
     Promise.all([
@@ -101,13 +130,28 @@ export function TaskDrawer({
   const availablePredecessors = allTasks.filter((t) => t.id !== task.id);
 
   const handleSave = async () => {
+    if (saving) return;
     setError('');
+    if (!title.trim()) {
+      const msg = 'Görev başlığı boş bırakılamaz.';
+      setError(msg);
+      showToast('error', msg);
+      return;
+    }
+    if (startDate && dueDate && new Date(dueDate) < new Date(startDate)) {
+      const msg = 'Bitiş tarihi başlangıç tarihinden önce olamaz.';
+      setError(msg);
+      showToast('error', msg);
+      return;
+    }
+
+    setSaving(true);
     try {
       const targetCol = columns.find((c) => c.id === columnId);
       await apiFetch(`/api/v1/tasks/${task.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          title,
+          title: title.trim(),
           description: description || null,
           priority,
           columnId,
@@ -118,11 +162,17 @@ export function TaskDrawer({
           estimatedHours: Number(estimatedHours),
           progress: Number(progress),
           isMilestone,
+          tags: tags.length > 0 ? JSON.stringify(tags) : null,
         }),
       });
       await onUpdated();
+      showToast('success', 'Değişiklikler kaydedildi.');
     } catch (err: any) {
-      setError(err.message);
+      const msg = err?.message || 'Değişiklikler kaydedilemedi.';
+      setError(msg);
+      showToast('error', msg);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -346,12 +396,63 @@ export function TaskDrawer({
             </label>
           </div>
 
+          <div className="space-y-1.5 text-xs">
+            <label className="text-zinc-500">Etiketler</label>
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-medium"
+                >
+                  #{tag}
+                  <button
+                    type="button"
+                    onClick={() => setTags((prev) => prev.filter((t) => t !== tag))}
+                    className="hover:text-rose-500"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+              {['Backend', 'UI', 'API', 'Bug', 'Test'].filter((p) => !tags.includes(p)).map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setTags((prev) => [...prev, preset])}
+                  className="px-2 py-0.5 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 text-zinc-500 hover:border-indigo-400 hover:text-indigo-600 transition"
+                >
+                  + {preset}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1.5 pt-1">
+              <input
+                type="text"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && tagInput.trim()) {
+                    e.preventDefault();
+                    const next = tagInput.trim();
+                    if (!tags.includes(next)) setTags((prev) => [...prev, next]);
+                    setTagInput('');
+                  }
+                }}
+                placeholder="Özel etiket yazıp Enter'a basın..."
+                className="flex-1 px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-transparent text-xs"
+              />
+            </div>
+          </div>
+
           <div className="flex justify-end">
             <button
+              type="button"
               onClick={handleSave}
-              className="px-4 py-2 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-medium hover:opacity-90"
+              disabled={saving}
+              className="px-4 py-2 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-medium hover:opacity-90 disabled:opacity-60 inline-flex items-center gap-1.5 transition"
             >
-              Değişiklikleri Kaydet
+              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {saving ? 'Kaydediliyor...' : 'Değişiklikleri Kaydet'}
             </button>
           </div>
 
@@ -566,6 +667,31 @@ export function TaskDrawer({
           </div>
         </div>
       </div>
+
+      {toast && (
+        <div
+          role="status"
+          className={`fixed bottom-6 right-6 z-[60] flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl ring-1 text-xs font-medium animate-toast-in ${
+            toast.type === 'success'
+              ? 'bg-emerald-600 text-white ring-emerald-500/40'
+              : 'bg-rose-600 text-white ring-rose-500/40'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+          ) : (
+            <AlertCircle className="w-4 h-4 shrink-0" />
+          )}
+          <span>{toast.text}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="ml-1 p-0.5 rounded-full hover:bg-white/20 transition"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

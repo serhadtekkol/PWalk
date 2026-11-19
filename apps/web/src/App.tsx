@@ -3,6 +3,7 @@ import {
   BarChart3,
   GanttChart,
   Kanban,
+  LayoutDashboard,
   Plus,
   Search,
   Settings2,
@@ -15,6 +16,7 @@ import { MyTasksView } from './components/MyTasksView';
 import { NotificationCenter } from './components/NotificationCenter';
 import { SettingsModal } from './components/SettingsModal';
 import { CreateProjectModal } from './components/CreateProjectModal';
+import { DashboardView } from './components/DashboardView';
 import { KanbanBoard } from './components/KanbanBoard';
 import { GanttView } from './components/GanttView';
 import { WorkloadView } from './components/WorkloadView';
@@ -29,13 +31,40 @@ import type {
   WorkloadReport,
 } from './types/pmam';
 
-type ProjectTab = 'kanban' | 'gantt' | 'workload' | 'settings';
+type ProjectTab = 'overview' | 'kanban' | 'gantt' | 'workload' | 'settings';
+const VALID_TABS: ProjectTab[] = ['overview', 'kanban', 'gantt', 'workload', 'settings'];
+const NAV_STORAGE_KEY = 'pmam_nav_state';
+
+function readInitialNavState(): {
+  projectId: string | null;
+  area: 'my-tasks' | 'project';
+  tab: ProjectTab;
+} {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const savedRaw = localStorage.getItem(NAV_STORAGE_KEY);
+    const saved = savedRaw ? JSON.parse(savedRaw) : {};
+
+    const rawArea = params.get('area') ?? saved.area;
+    const area: 'my-tasks' | 'project' = rawArea === 'my-tasks' ? 'my-tasks' : 'project';
+
+    const rawTab = params.get('tab') ?? saved.tab;
+    const tab: ProjectTab = VALID_TABS.includes(rawTab as ProjectTab) ? (rawTab as ProjectTab) : 'kanban';
+
+    const projectId = params.get('project') ?? saved.projectId ?? null;
+    return { projectId, area, tab };
+  } catch {
+    return { projectId: null, area: 'project', tab: 'kanban' };
+  }
+}
 
 function AuthenticatedWorkspace() {
+  const { user } = useAuth();
+  const initialNav = useMemo(() => readInitialNavState(), []);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [activeArea, setActiveArea] = useState<'my-tasks' | 'project'>('project');
-  const [projectTab, setProjectTab] = useState<ProjectTab>('kanban');
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialNav.projectId);
+  const [activeArea, setActiveArea] = useState<'my-tasks' | 'project'>(initialNav.area);
+  const [projectTab, setProjectTab] = useState<ProjectTab>(initialNav.tab);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [criticalPath, setCriticalPath] = useState<CriticalPathResult | null>(null);
@@ -61,10 +90,28 @@ function AuthenticatedWorkspace() {
     setProjects(projs);
     setMyTasks(mine);
     setNotifications(notifs);
-    if (projs.length > 0 && !selectedProjectId) {
+    if (projs.length > 0 && (!selectedProjectId || !projs.some((p) => p.id === selectedProjectId))) {
       setSelectedProjectId(projs[0].id);
     }
   }, [selectedProjectId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        NAV_STORAGE_KEY,
+        JSON.stringify({ projectId: selectedProjectId, area: activeArea, tab: projectTab }),
+      );
+      const params = new URLSearchParams(window.location.search);
+      params.set('area', activeArea);
+      params.set('tab', projectTab);
+      if (selectedProjectId) params.set('project', selectedProjectId);
+      else params.delete('project');
+      const nextUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState(null, '', nextUrl);
+    } catch {
+      // ignore storage errors
+    }
+  }, [selectedProjectId, activeArea, projectTab]);
 
   const loadProjectData = useCallback(async (projectId: string) => {
     const [projectDetail, projTasks, cpm, wl] = await Promise.all([
@@ -182,6 +229,16 @@ function AuthenticatedWorkspace() {
                 {/* View Tabs */}
                 <nav className="flex items-center gap-1 text-xs">
                   <button
+                    onClick={() => setProjectTab('overview')}
+                    className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition ${
+                      projectTab === 'overview'
+                        ? 'bg-zinc-100 dark:bg-zinc-800 font-medium text-zinc-900 dark:text-zinc-100'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    <LayoutDashboard className="w-3.5 h-3.5" /> Özet
+                  </button>
+                  <button
                     onClick={() => setProjectTab('kanban')}
                     className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition ${
                       projectTab === 'kanban'
@@ -272,10 +329,22 @@ function AuthenticatedWorkspace() {
               </div>
             </header>
 
+            {projectTab === 'overview' && (
+              <DashboardView
+                project={activeProject}
+                tasks={filteredTasks}
+                criticalPath={criticalPath}
+                workload={workload}
+                onSelectTask={(t) => setSelectedTaskId(t.id)}
+              />
+            )}
+
             {projectTab === 'kanban' && (
               <KanbanBoard
                 columns={activeProject.columns}
                 tasks={filteredTasks}
+                criticalPath={criticalPath}
+                currentUserId={user?.id}
                 onSelectTask={(t) => setSelectedTaskId(t.id)}
                 onQuickCreate={handleQuickCreate}
                 onMoveTask={async (taskId, columnId, order) => {
@@ -285,10 +354,36 @@ function AuthenticatedWorkspace() {
                   });
                   await loadProjectData(activeProject.id);
                 }}
-                onAddColumn={async (name) => {
+                onAddColumn={async (payload) => {
                   await apiFetch(`/api/v1/projects/${activeProject.id}/columns`, {
                     method: 'POST',
-                    body: JSON.stringify({ name, mappedStatus: 'TODO' }),
+                    body: JSON.stringify(payload),
+                  });
+                  await loadProjectData(activeProject.id);
+                }}
+                onUpdateColumn={async (columnId, payload) => {
+                  await apiFetch(`/api/v1/columns/${columnId}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify(payload),
+                  });
+                  await loadProjectData(activeProject.id);
+                }}
+                onDeleteColumn={async (columnId) => {
+                  await apiFetch(`/api/v1/columns/${columnId}`, {
+                    method: 'DELETE',
+                  });
+                  await loadProjectData(activeProject.id);
+                }}
+                onMoveColumn={async (columnId, dir) => {
+                  const sorted = [...activeProject.columns].sort((a, b) => a.order - b.order);
+                  const idx = sorted.findIndex((c) => c.id === columnId);
+                  const targetIdx = idx + dir;
+                  if (idx < 0 || targetIdx < 0 || targetIdx >= sorted.length) return;
+                  const ids = sorted.map((c) => c.id);
+                  [ids[idx], ids[targetIdx]] = [ids[targetIdx], ids[idx]];
+                  await apiFetch(`/api/v1/projects/${activeProject.id}/columns/reorder`, {
+                    method: 'POST',
+                    body: JSON.stringify({ columnIds: ids }),
                   });
                   await loadProjectData(activeProject.id);
                 }}
@@ -300,12 +395,46 @@ function AuthenticatedWorkspace() {
                 tasks={filteredTasks}
                 criticalPath={criticalPath}
                 onSelectTask={(t) => setSelectedTaskId(t.id)}
-                onUpdateDates={async (taskId, startDate, dueDate) => {
+                onUpdateDates={async (taskId, startDate, dueDate, cascade) => {
                   await apiFetch(`/api/v1/tasks/${taskId}`, {
                     method: 'PATCH',
-                    body: JSON.stringify({ startDate, dueDate }),
+                    body: JSON.stringify({ startDate, dueDate, cascade }),
                   });
                   await loadProjectData(activeProject.id);
+                }}
+                onTakeBaseline={async () => {
+                  await apiFetch(`/api/v1/projects/${activeProject.id}/schedule/baseline`, {
+                    method: 'POST',
+                  });
+                  await loadProjectData(activeProject.id);
+                }}
+                onExportCsv={async () => {
+                  const token = localStorage.getItem('pmam_access_token');
+                  const res = await fetch(`/api/v1/projects/${activeProject.id}/export/csv`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                  });
+                  if (!res.ok) return;
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `${activeProject.key.toLowerCase()}-tasks.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                onExportIcs={async () => {
+                  const token = localStorage.getItem('pmam_access_token');
+                  const res = await fetch(`/api/v1/projects/${activeProject.id}/export/ics`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                  });
+                  if (!res.ok) return;
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `${activeProject.key.toLowerCase()}-schedule.ics`;
+                  a.click();
+                  URL.revokeObjectURL(url);
                 }}
               />
             )}

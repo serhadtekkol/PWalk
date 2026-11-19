@@ -17,8 +17,8 @@ describe('Task 5: Dependencies, CPM Critical Path & Workload Engine', () => {
 
   it('computes CPM critical path including zero-duration milestones without NaN', () => {
     const tasks = [
-      { id: 'A', startDate: new Date('2026-11-01'), dueDate: new Date('2026-11-04'), isMilestone: false }, // 3d
-      { id: 'B', startDate: new Date('2026-11-01'), dueDate: new Date('2026-11-02'), isMilestone: false }, // 1d
+      { id: 'A', startDate: new Date('2026-11-01'), dueDate: new Date('2026-11-04'), isMilestone: false }, // 4d (inclusive)
+      { id: 'B', startDate: new Date('2026-11-01'), dueDate: new Date('2026-11-02'), isMilestone: false }, // 2d (inclusive)
       { id: 'M', startDate: new Date('2026-11-04'), dueDate: new Date('2026-11-04'), isMilestone: true },  // 0d
     ];
     const deps = [
@@ -26,12 +26,24 @@ describe('Task 5: Dependencies, CPM Critical Path & Workload Engine', () => {
       { predecessorId: 'B', successorId: 'M', type: 'FS' as const, lagDays: 0 },
     ];
     const cpm = computeCriticalPath(tasks, deps);
-    expect(cpm.projectDurationDays).toBe(3);
+    expect(cpm.projectDurationDays).toBe(4);
     expect(cpm.criticalTaskIds).toContain('A');
     expect(cpm.criticalTaskIds).toContain('M');
     expect(cpm.criticalTaskIds).not.toContain('B');
     expect(cpm.nodes.M.slackDays).toBe(0);
     expect(cpm.nodes.B.slackDays).toBe(2);
+  });
+
+  it('accounts for calendar gaps when tasks are shifted to later dates', () => {
+    const tasks = [
+      { id: 'A', startDate: new Date('2026-11-01'), dueDate: new Date('2026-11-02'), isMilestone: false }, // 2d
+      { id: 'B', startDate: new Date('2026-11-10'), dueDate: new Date('2026-11-12'), isMilestone: false }, // shifted +9d, 3d -> ends day 12
+    ];
+    const deps = [{ predecessorId: 'A', successorId: 'B', type: 'FS' as const, lagDays: 0 }];
+    const cpm = computeCriticalPath(tasks, deps);
+    expect(cpm.projectDurationDays).toBe(12);
+    expect(cpm.criticalTaskIds).toContain('A');
+    expect(cpm.criticalTaskIds).toContain('B');
   });
 
   it('computes daily workload and flags overloaded days', () => {

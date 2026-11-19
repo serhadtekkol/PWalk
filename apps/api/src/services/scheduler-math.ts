@@ -68,12 +68,19 @@ export function computeCriticalPath(tasks: CpmTaskInput[], dependencies: CpmDepI
   }
 
   const durationMap = new Map<string, number>();
+  const scheduledStartMap = new Map<string, number>();
   const taskIds = new Set(tasks.map((t) => t.id));
+  let minStartDay = Infinity;
   for (const t of tasks) {
+    const s = toDayIndex(t.startDate);
+    if (s < minStartDay) minStartDay = s;
+  }
+  for (const t of tasks) {
+    scheduledStartMap.set(t.id, toDayIndex(t.startDate) - minStartDay);
     if (t.isMilestone) {
       durationMap.set(t.id, 0);
     } else {
-      const diff = Math.max(1, toDayIndex(t.dueDate) - toDayIndex(t.startDate));
+      const diff = Math.max(1, toDayIndex(t.dueDate) - toDayIndex(t.startDate) + 1);
       durationMap.set(t.id, diff);
     }
   }
@@ -115,10 +122,14 @@ export function computeCriticalPath(tasks: CpmTaskInput[], dependencies: CpmDepI
 
   const es = new Map<string, number>();
   const ef = new Map<string, number>();
+  const drivingPreds = new Map<string, string[]>();
 
   for (const id of topo) {
     const dur = durationMap.get(id) ?? 0;
-    let maxEs = 0;
+    const schedStart = scheduledStartMap.get(id) ?? 0;
+    let maxPredConstraint = -Infinity;
+    const predCandidates: { predId: string; val: number }[] = [];
+
     for (const d of preds.get(id) ?? []) {
       const pEs = es.get(d.predecessorId) ?? 0;
       const pEf = ef.get(d.predecessorId) ?? 0;
@@ -128,15 +139,40 @@ export function computeCriticalPath(tasks: CpmTaskInput[], dependencies: CpmDepI
       else if (d.type === 'SS') candidateEs = pEs + lag;
       else if (d.type === 'FF') candidateEs = pEf + lag - dur;
       else if (d.type === 'SF') candidateEs = pEs + lag - dur;
-      if (candidateEs > maxEs) maxEs = candidateEs;
+      predCandidates.push({ predId: d.predecessorId, val: candidateEs });
+      if (candidateEs > maxPredConstraint) maxPredConstraint = candidateEs;
     }
-    es.set(id, maxEs);
-    ef.set(id, maxEs + dur);
+
+    const drivers = predCandidates
+      .filter((c) => c.val === maxPredConstraint)
+      .map((c) => c.predId);
+    drivingPreds.set(id, drivers);
+
+    const nodeEs = Math.max(schedStart, maxPredConstraint === -Infinity ? 0 : maxPredConstraint);
+    es.set(id, nodeEs);
+    ef.set(id, nodeEs + dur);
   }
 
   let projectDurationDays = 0;
   for (const val of ef.values()) {
     if (val > projectDurationDays) projectDurationDays = val;
+  }
+
+  // Walk backwards from finishing tasks along driving predecessors to get the full critical path chain
+  const criticalSet = new Set<string>();
+  const critStack: string[] = [];
+  for (const id of topo) {
+    if ((ef.get(id) ?? 0) === projectDurationDays) {
+      critStack.push(id);
+    }
+  }
+  while (critStack.length > 0) {
+    const cur = critStack.pop()!;
+    if (criticalSet.has(cur)) continue;
+    criticalSet.add(cur);
+    for (const pId of drivingPreds.get(cur) ?? []) {
+      if (!criticalSet.has(pId)) critStack.push(pId);
+    }
   }
 
   const ls = new Map<string, number>();
@@ -174,7 +210,7 @@ export function computeCriticalPath(tasks: CpmTaskInput[], dependencies: CpmDepI
     const lateStart = ls.get(id) ?? 0;
     const lateFinish = lf.get(id) ?? 0;
     const slackDays = Math.round((lateStart - earlyStart) * 100) / 100;
-    const isCritical = slackDays <= 0;
+    const isCritical = criticalSet.has(id);
     if (isCritical) criticalTaskIds.push(id);
     nodes[id] = {
       durationDays: dur,
