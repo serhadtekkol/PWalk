@@ -51,9 +51,9 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await fastify.register(swagger, {
     openapi: {
       info: {
-        title: 'PMAM Project Management API',
+        title: 'PWalk Project Management API',
         version: '1.0.0',
-        description: 'REST API for PMAM Web & Mobile clients (Kanban, MS Project Gantt/WBS, Push Notifications)',
+        description: 'REST API for PWalk Web & Mobile clients (Kanban, MS Project Gantt/WBS, Push Notifications)',
       },
       components: {
         securitySchemes: {

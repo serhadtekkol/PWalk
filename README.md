@@ -1,4 +1,4 @@
-# PMAM — Proje Yönetimi Uygulaması
+# PWalk — Proje Yönetimi Uygulaması
 
 Kanban Board, MS Project benzeri Gantt/WBS/Kritik Yol/İş Yükü görünümleri, Otomatik Tarih Kaydırma (Auto-Schedule), Baseline karşılaştırması, Web Push + `ntfy` bildirimleri ve mobil uyumlu REST API (`/api/v1` + `/docs` Swagger) içeren çok kullanıcılı proje yönetim uygulaması.
 

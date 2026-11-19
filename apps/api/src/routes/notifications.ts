@@ -132,7 +132,7 @@ export async function notificationRoutes(fastify: FastifyInstance) {
     if (fastify.deliverNotification) {
       await fastify.deliverNotification(request.authUser.id, {
         type: 'REMINDER',
-        title: 'PMAM Test Bildirimi',
+        title: 'PWalk Test Bildirimi',
         body: 'Push bildirimleri aktif ve sorunsuz çalışıyor.',
       });
     }

@@ -211,8 +211,8 @@ export async function scheduleRoutes(fastify: FastifyInstance) {
     const lines = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//PMAM//Project Schedule//TR',
-      `X-WR-CALNAME:${escIcs(project?.name ?? 'PMAM Proje')}`,
+      'PRODID:-//PWalk//Project Schedule//TR',
+      `X-WR-CALNAME:${escIcs(project?.name ?? 'PWalk Proje')}`,
     ];
     for (const t of tasks) {
       const endPlusOne = new Date(new Date(t.dueDate).getTime() + 86_400_000);

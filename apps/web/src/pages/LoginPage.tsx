@@ -46,7 +46,7 @@ export function LoginPage() {
             <Layers className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold tracking-tight">PMAM</h1>
+            <h1 className="text-lg font-semibold tracking-tight">PWalk</h1>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">Kanban &amp; MS Project Planlama</p>
           </div>
         </div>

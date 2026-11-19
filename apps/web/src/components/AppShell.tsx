@@ -59,7 +59,7 @@ export function AppShell({
               <div className="w-7 h-7 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 flex items-center justify-center">
                 <Layers className="w-4 h-4" />
               </div>
-              <span className="font-semibold text-sm tracking-tight">PMAM</span>
+              <span className="font-semibold text-sm tracking-tight">PWalk</span>
             </div>
           )}
           <button

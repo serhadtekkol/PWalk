@@ -1,6 +1,6 @@
 self.addEventListener('push', (event) => {
   if (!event.data) return;
-  let data = { title: 'PMAM Bildirimi', body: '' };
+  let data = { title: 'PWalk Bildirimi', body: '' };
   try {
     data = event.data.json();
   } catch {
@@ -8,7 +8,7 @@ self.addEventListener('push', (event) => {
   }
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'PMAM', {
+    self.registration.showNotification(data.title || 'PWalk', {
       body: data.body || '',
       tag: data.taskId || 'pmam-notification',
       data,

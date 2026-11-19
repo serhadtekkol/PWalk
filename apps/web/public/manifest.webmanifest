@@ -1,6 +1,6 @@
 {
-  "name": "PMAM — Proje Yönetimi",
-  "short_name": "PMAM",
+  "name": "PWalk — Proje Yönetimi",
+  "short_name": "PWalk",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#09090b",
