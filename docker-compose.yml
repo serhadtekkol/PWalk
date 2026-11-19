@@ -1,0 +1,44 @@
+services:
+  pmam-api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: pmam-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: 4000
+    networks:
+      - pmam-internal
+      - web
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/api/v1/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  pmam-web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: pmam-web
+    restart: unless-stopped
+    depends_on:
+      pmam-api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3600}:80"
+    networks:
+      - pmam-internal
+      - web
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+networks:
+  pmam-internal:
+  web:
+    external: true

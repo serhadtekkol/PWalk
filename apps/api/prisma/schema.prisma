@@ -1,0 +1,202 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String             @id @default(uuid())
+  email              String             @unique
+  passwordHash       String
+  name               String
+  avatarColor        String             @default("#2563eb")
+  role               String             @default("MEMBER") // ADMIN | MEMBER
+  dailyCapacityHours Float              @default(8)
+  ntfyTopic          String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  refreshTokens      RefreshToken[]
+  memberships        ProjectMember[]
+  assignedTasks      Task[]             @relation("TaskAssignee")
+  createdTasks       Task[]             @relation("TaskCreator")
+  comments           TaskComment[]
+  activities         TaskActivity[]
+  reminders          Reminder[]
+  notifications      Notification[]
+  pushSubscriptions  PushSubscription[]
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model Project {
+  id          String          @id @default(uuid())
+  name        String
+  key         String          @unique
+  description String?         @db.NVarChar(Max)
+  color       String          @default("#0f172a")
+  status      String          @default("ACTIVE") // ACTIVE | ARCHIVED
+  taskSeq     Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  members     ProjectMember[]
+  columns     BoardColumn[]
+  tasks       Task[]
+}
+
+model ProjectMember {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  role      String   @default("EDITOR") // OWNER | EDITOR | VIEWER
+  createdAt DateTime @default(now())
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([projectId, userId])
+}
+
+model BoardColumn {
+  id           String   @id @default(uuid())
+  projectId    String
+  name         String
+  order        Int
+  wipLimit     Int?
+  mappedStatus String   @default("TODO") // TODO | IN_PROGRESS | REVIEW | DONE
+  color        String?
+
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks        Task[]
+}
+
+model Task {
+  id             String           @id @default(uuid())
+  projectId      String
+  code           String
+  parentId       String?
+  columnId       String
+  order          Int              @default(0)
+  title          String
+  description    String?          @db.NVarChar(Max)
+  priority       String           @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT
+  status         String           @default("TODO") // TODO | IN_PROGRESS | REVIEW | DONE
+  startDate         DateTime
+  dueDate           DateTime
+  baselineStartDate DateTime?
+  baselineDueDate   DateTime?
+  tags              String?          @db.NVarChar(Max) // JSON array string e.g. ["Backend","UI"]
+  estimatedHours    Float            @default(8)
+  progress       Int              @default(0)
+  isMilestone    Boolean          @default(false)
+  assigneeId     String?
+  creatorId      String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  parent         Task?            @relation("TaskSubtasks", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subtasks       Task[]           @relation("TaskSubtasks")
+  column         BoardColumn      @relation(fields: [columnId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assignee       User?            @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  creator        User             @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  predecessorLinks TaskDependency[] @relation("DependencySuccessor")
+  successorLinks   TaskDependency[] @relation("DependencyPredecessor")
+  comments         TaskComment[]
+  activities       TaskActivity[]
+  reminders        Reminder[]
+  notifications    Notification[]
+
+  @@unique([projectId, code])
+}
+
+model TaskDependency {
+  id            String @id @default(uuid())
+  predecessorId String
+  successorId   String
+  type          String @default("FS") // FS | SS | FF | SF
+  lagDays       Int    @default(0)
+
+  predecessor   Task   @relation("DependencyPredecessor", fields: [predecessorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  successor     Task   @relation("DependencySuccessor", fields: [successorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([predecessorId, successorId])
+}
+
+model TaskComment {
+  id        String   @id @default(uuid())
+  taskId    String
+  userId    String
+  body      String   @db.NVarChar(Max)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user      User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model TaskActivity {
+  id        String   @id @default(uuid())
+  taskId    String
+  userId    String
+  action    String
+  metadata  String?  @db.NVarChar(Max)
+  createdAt DateTime @default(now())
+
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user      User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model Reminder {
+  id        String    @id @default(uuid())
+  taskId    String
+  userId    String
+  remindAt  DateTime
+  message   String?
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user      User      @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  taskId    String?
+  type      String   // ASSIGNED | REMINDER | DUE_SOON | OVERDUE | COMMENT
+  title     String
+  body      String   @db.NVarChar(Max)
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model PushSubscription {
+  id          String   @id @default(uuid())
+  userId      String
+  platform    String   @default("WEB") // WEB | IOS | ANDROID
+  endpoint    String?  @db.NVarChar(Max)
+  p256dh      String?
+  auth        String?
+  deviceToken String?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
