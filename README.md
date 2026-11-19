@@ -31,8 +31,8 @@ Kanban Board, MS Project benzeri Gantt/WBS/Kritik Yol/İş Yükü görünümleri
    cp .env.example .env
    npx web-push generate-vapid-keys
    ```
-   - `DATABASE_URL` içinde mevcut Docker `mssql` sunucunuzun şifresini yazın:
-     `sqlserver://mssql:1433;database=pmam;user=sa;password=SIFRENIZ;encrypt=true;trustServerCertificate=true`
+   - `DATABASE_URL` içinde mevcut Docker `mssql` sunucunuzun kullanıcı adı ve şifresini yazın:
+     `sqlserver://mssql:1433;database=pmam;user=KULLANICI_ADINIZ;password=SIFRENIZ;encrypt=true;trustServerCertificate=true`
 
 2. Container'ları oluşturup ayağa kaldırın:
    ```bash
